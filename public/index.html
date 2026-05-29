@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>字体抓取工作台</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace">
+        <aside class="panel input-panel">
+          <div class="brand">
+            <span class="brand-mark">F</span>
+            <div>
+              <h1>字体抓取工作台</h1>
+              <p>AI 缺失字体截图识别，批量搜索，可下载结果打包。</p>
+            </div>
+          </div>
+
+          <label class="drop-zone" for="screenshotInput">
+            <input id="screenshotInput" type="file" accept="image/*" />
+            <span class="drop-icon">↑</span>
+            <strong>上传 Illustrator 缺失字体截图</strong>
+            <small id="ocrStatus">用于 OCR 提取字体名，可继续手动修正</small>
+          </label>
+
+          <div class="field">
+            <div class="field-head">
+              <label for="fontInput">字体名称</label>
+              <button id="sampleButton" class="ghost-button" type="button">填入示例</button>
+            </div>
+            <textarea id="fontInput" spellcheck="false" placeholder="每行一个字体名，例如：
+方正兰亭黑
+思源黑体
+Helvetica Neue
+DIN"></textarea>
+          </div>
+
+          <div class="actions">
+            <button id="extractButton" class="secondary-button" type="button">整理名称</button>
+            <button id="searchButton" class="primary-button" type="button">开始搜索</button>
+          </div>
+        </aside>
+
+        <section class="panel results-panel">
+          <header class="results-head">
+            <div>
+              <p class="eyebrow">实时多源搜索</p>
+              <h2>搜索结果</h2>
+            </div>
+            <button id="downloadButton" class="download-button" type="button" disabled>打包下载</button>
+          </header>
+
+          <div class="summary-grid">
+            <div>
+              <span id="totalCount">0</span>
+              <small>待搜索</small>
+            </div>
+            <div>
+              <span id="foundCount">0</span>
+              <small>可下载</small>
+            </div>
+            <div>
+              <span id="possibleCount">0</span>
+              <small>疑似结果</small>
+            </div>
+          </div>
+
+          <div id="emptyState" class="empty-state">
+            <strong>先上传截图或粘贴字体名</strong>
+            <p>搜索会边跑边整理结果；直链字体文件和 zip 会进入打包下载。</p>
+          </div>
+
+          <div id="resultList" class="result-list"></div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
