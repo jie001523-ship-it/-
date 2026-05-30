@@ -24,7 +24,7 @@ export function extractFontNames(input) {
     .replace(/\r/g, "\n")
     .replace(/[“”]/g, "\"")
     .replace(/[‘’]/g, "'")
-    .replace(/[，、;；]/g, "\n");
+    .replace(/[，,、;；]/g, "\n");
 
   const candidates = text
     .split(/\n|(?<=["'])\s+(?=["'])/)

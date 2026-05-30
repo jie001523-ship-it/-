@@ -1,8 +1,9 @@
 const SEARCH_ENDPOINT = "https://html.duckduckgo.com/html/";
 const MAX_FONTS = 20;
-const MAX_RESULTS_PER_FONT = 8;
+const MAX_RESULTS_PER_FONT = 10;
 const DOWNLOAD_EXTENSIONS = [".ttf", ".otf", ".woff", ".woff2", ".zip", ".rar", ".7z"];
 const FONT_EXTENSIONS = [".ttf", ".otf", ".woff", ".woff2"];
+const ZIP_EXTENSIONS = [".zip", ".rar", ".7z"];
 
 export async function buildSearchResults(fontNames) {
   const names = [...new Set((fontNames || []).map((name) => String(name).trim()).filter(Boolean))].slice(0, MAX_FONTS);
@@ -19,6 +20,8 @@ export async function buildSearchResults(fontNames) {
 
 async function searchFont(fontName) {
   const queries = [
+    `${fontName} zip 下载`,
+    `${fontName} 字体包`,
     `${fontName} ttf`,
     `${fontName} otf`,
     `${fontName} 字体 下载`,
@@ -51,14 +54,15 @@ async function searchFont(fontName) {
 
 async function enrichWithDirectLinks(fontName, results) {
   const directResults = [...results];
+  // Inspect high-score pages to find direct download links
   const pagesToInspect = results
-    .filter((item) => item.kind !== "direct" && item.score >= 55)
-    .slice(0, 4);
+    .filter((item) => item.kind !== "direct" && item.score >= 48)
+    .slice(0, 6);
 
   await Promise.all(
     pagesToInspect.map(async (item) => {
-      const links = await findDownloadLinks(item.url);
-      for (const link of links.slice(0, 3)) {
+      const links = await findDownloadLinks(item.url, fontName);
+      for (const link of links.slice(0, 5)) {
         if (directResults.some((existing) => existing.url === link.url)) continue;
         directResults.push({
           title: `${fontName} 下载链接 - ${link.fileName}`,
@@ -75,7 +79,7 @@ async function enrichWithDirectLinks(fontName, results) {
   return directResults;
 }
 
-async function findDownloadLinks(pageUrl) {
+async function findDownloadLinks(pageUrl, fontName) {
   try {
     const response = await fetch(pageUrl, {
       headers: {
@@ -91,7 +95,9 @@ async function findDownloadLinks(pageUrl) {
 
     const html = await response.text();
     const links = [];
-    const hrefPattern = /href\s*=\s*["']([^"']+)["']/gi;
+
+    // Pattern 1: Direct href with download extension
+    const hrefPattern = /<a\b[^>]*?\shref\s*=\s*["']([^"']+)["']/gi;
     let match;
 
     while ((match = hrefPattern.exec(html))) {
@@ -101,12 +107,42 @@ async function findDownloadLinks(pageUrl) {
 
       try {
         const url = normalizeDownloadUrl(new URL(href, pageUrl).href);
-        links.push({
-          url,
-          fileName: decodeURIComponent(new URL(url).pathname.split("/").pop() || `font${extension}`)
-        });
+        if (!links.some(l => l.url === url)) {
+          links.push({
+            url,
+            fileName: decodeURIComponent(new URL(url).pathname.split("/").pop() || `font${extension}`)
+          });
+        }
       } catch {
         continue;
+      }
+    }
+
+    // Pattern 2: Links with download-related text that might lead to zips
+    const downloadLinkPattern = /<a\b[^>]*?\shref\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+    while ((match = downloadLinkPattern.exec(html))) {
+      const href = decodeHtml(match[1]);
+      const text = stripHtml(match[2]).toLowerCase();
+      const extension = getExtension(href);
+
+      // Skip already-found direct file links
+      if (DOWNLOAD_EXTENSIONS.includes(extension)) continue;
+
+      // Detect download-button-style links that might lead to zip
+      const hasDownloadHint = /下载|download|\.zip|\.rar|字体包|font.*pack/i.test(text);
+      const urlLower = href.toLowerCase();
+      const looksLikeDownload = hasDownloadHint && /\.(zip|rar|7z|ttf|otf|woff)/i.test(urlLower);
+
+      if (looksLikeDownload) {
+        try {
+          const url = normalizeDownloadUrl(new URL(href, pageUrl).href);
+          if (!links.some(l => l.url === url)) {
+            const pathParts = new URL(url).pathname.split("/").pop() || "download";
+            links.push({ url, fileName: pathParts });
+          }
+        } catch {
+          continue;
+        }
       }
     }
 
@@ -169,12 +205,14 @@ function scoreResult(fontName, result) {
   const haystack = `${result.title} ${result.url} ${result.snippet}`.toLowerCase();
   const normalizedName = fontName.toLowerCase();
   const downloadable = DOWNLOAD_EXTENSIONS.some((ext) => haystack.includes(ext));
-  const directFile = DOWNLOAD_EXTENSIONS.some((ext) => result.url.toLowerCase().includes(ext));
+  const isZip = ZIP_EXTENSIONS.some((ext) => result.url.toLowerCase().endsWith(ext));
+  const isDirectFile = DOWNLOAD_EXTENSIONS.some((ext) => result.url.toLowerCase().endsWith(ext));
   let score = 20;
 
   if (haystack.includes(normalizedName)) score += 40;
   if (downloadable) score += 25;
-  if (directFile) score += 20;
+  if (isDirectFile) score += 25;
+  if (isZip) score += 20;  // Extra boost for zip archives
   if (/font|字体|typeface|download|下载/i.test(haystack)) score += 10;
   if (/free|github|google|source|开源|免费/i.test(haystack)) score += 8;
   if (/crack|破解|高速下载|软件园|driver|apk/i.test(haystack)) score -= 35;
@@ -182,8 +220,8 @@ function scoreResult(fontName, result) {
   return {
     ...result,
     score: Math.max(0, Math.min(100, score)),
-    downloadable: directFile,
-    kind: directFile ? "direct" : downloadable ? "candidate" : "page"
+    downloadable: isDirectFile,
+    kind: isDirectFile ? "direct" : downloadable ? "candidate" : "page"
   };
 }
 

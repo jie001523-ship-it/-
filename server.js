@@ -48,8 +48,15 @@ async function serveStatic(req, res) {
 
   try {
     const ext = extname(target);
+    const stream = createReadStream(target);
+    stream.on("error", () => {
+      if (!res.headersSent) {
+        res.writeHead(404);
+        res.end("Not found");
+      }
+    });
     res.writeHead(200, { "content-type": mimeTypes[ext] || "application/octet-stream" });
-    createReadStream(target).pipe(res);
+    stream.pipe(res);
   } catch {
     res.writeHead(404);
     res.end("Not found");
